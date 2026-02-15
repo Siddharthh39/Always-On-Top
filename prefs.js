@@ -1,4 +1,3 @@
-import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
 import {ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -7,7 +6,7 @@ export default class OnTheTopPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         window.set_default_size(500-122, 600-122);
         let settings = this.getSettings();
-        let json = this._importJSONFile();
+        const snapshot = this._loadSettingsSnapshot(settings);
 
         let builder = new Gtk.Builder();
         builder.set_translation_domain(this.metadata['gettext-domain']);
@@ -19,15 +18,15 @@ export default class OnTheTopPreferences extends ExtensionPreferences {
         let shortcutButton = builder.get_object('shortcut-button');
 
         //set the default value
-        if(json.position == 'right'){
+        if(snapshot.position == 'right'){
             comboRowPositions.set_selected(1);
         }else{
             comboRowPositions.set_selected(0);  
         }
 
-        comboRowRanks.set_selected(json.rank);
+        comboRowRanks.set_selected(snapshot.rank);
 
-        if(json.sticky == "false"){
+        if(snapshot.stickiness == "false"){
             comboRowSticky.set_selected(1);
         }else{
             comboRowSticky.set_selected(0);
@@ -56,21 +55,12 @@ export default class OnTheTopPreferences extends ExtensionPreferences {
         window.add(builder.get_object('settings_page'));
     }
 
-    _importJSONFile() {
-        let settingsJSONpath = `${this.path}/settings.json`
-        try {
-            let file = Gio.File.new_for_path(settingsJSONpath);
-            let [success, content] = file.load_contents(null);
-            if (success) {
-                let json = JSON.parse(content);
-                return json;
-            } else {
-                return null;
-            }
-        } catch (error) {
-            console.log('error',error);
-            return null;
-        }
+    _loadSettingsSnapshot(settings) {
+        const position = settings.get_string('positions') || 'right';
+        const rankValue = parseInt(settings.get_string('ranking'), 10);
+        const rank = Number.isNaN(rankValue) ? 0 : rankValue;
+        const stickiness = settings.get_string('stickiness') || 'false';
+        return { position, rank, stickiness };
     }
 
     _comboRowPositionsChange(comboRow, settings){

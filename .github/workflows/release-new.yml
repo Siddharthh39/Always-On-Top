@@ -1,0 +1,116 @@
+name: Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y glib2.0-dev libglib2.0-dev-bin zip
+        
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+    - name: Create extension package
+      run: |
+        EXTENSION_UUID="AlwaysOnTop@Siddharthh39.github.io"
+        TEMP_DIR="/tmp/gnome-extension-package"
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        PACKAGE_NAME="always-on-top-v${VERSION}.zip"
+        
+        # Create temp directory
+        mkdir -p "$TEMP_DIR/$EXTENSION_UUID"
+        
+        # Copy extension files
+        cp metadata.json "$TEMP_DIR/$EXTENSION_UUID/"
+        cp extension.js "$TEMP_DIR/$EXTENSION_UUID/"
+        cp prefs.js "$TEMP_DIR/$EXTENSION_UUID/"
+        cp stylesheet.css "$TEMP_DIR/$EXTENSION_UUID/"
+        cp settings.ui "$TEMP_DIR/$EXTENSION_UUID/"
+        cp -r icons/ "$TEMP_DIR/$EXTENSION_UUID/"
+        cp -r schemas/ "$TEMP_DIR/$EXTENSION_UUID/"
+        
+        # Compile schemas
+        cd "$TEMP_DIR/$EXTENSION_UUID/schemas"
+        glib-compile-schemas .
+        
+        # Create package
+        cd "$TEMP_DIR"
+        zip -r "$PACKAGE_NAME" "$EXTENSION_UUID"
+        
+        # Move to workspace
+        mv "$PACKAGE_NAME" "$GITHUB_WORKSPACE/"
+        
+        echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
+        
+    - name: Create source package
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        SOURCE_PACKAGE="always-on-top-source-v${VERSION}.zip"
+        
+        # Create source package excluding generated files
+        zip -r "$SOURCE_PACKAGE" . \
+          -x "*.zip" \
+          -x ".git/*" \
+          -x ".github/*" \
+          -x "dist/*" \
+          -x "schemas/gschemas.compiled"
+          
+        echo "SOURCE_PACKAGE=$SOURCE_PACKAGE" >> $GITHUB_ENV
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ${{ env.PACKAGE_NAME }}
+          ${{ env.SOURCE_PACKAGE }}
+        body: |
+          ## Always On Top Extension v${{ steps.get_version.outputs.VERSION }}
+          
+          ### 🚀 Installation
+          
+          #### For Users:
+          1. Download `${{ env.PACKAGE_NAME }}`
+          2. Go to [GNOME Extensions](https://extensions.gnome.org/)
+          3. Upload the zip file
+          
+          #### For Developers:
+          - Download `${{ env.SOURCE_PACKAGE }}` for the complete source code
+          
+          ### 📋 What's New
+          
+          <!-- Add changelog here -->
+          
+          ### 🔧 Manual Installation
+          
+          ```bash
+          # Extract and install
+          unzip ${{ env.PACKAGE_NAME }}
+          cp -r AlwaysOnTop@Siddharthh39.github.io ~/.local/share/gnome-shell/extensions/
+          
+          # Enable extension
+          gnome-extensions enable AlwaysOnTop@Siddharthh39.github.io
+          
+          # Restart GNOME Shell (X11 only)
+          # Alt+F2, type 'r', press Enter
+          ```
+          
+          ### 🐛 Bug Reports
+          
+          Report issues at: https://github.com/Siddharthh39/Always-On-Top/issues
+          
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
