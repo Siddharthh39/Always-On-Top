@@ -20,6 +20,9 @@ export default class OnTheTop extends Extension {
         this.settings.connect("changed::stickiness", this._changePosition.bind(this))
         this.settings.connect("changed::toggle-pin-shortcut", this._updateShortcut.bind(this))
 
+        // Cache a snapshot of settings to avoid null JSON reads
+        this._settingsCache = this._loadSettingsSnapshot();
+
         this._menu = null;
 
         this._handlerId = null;
@@ -43,7 +46,8 @@ export default class OnTheTop extends Extension {
         // Set up keyboard shortcut
         this._setupShortcut();
 
-        this.settings.set_string("stickiness", this._settingsJSON.sticky);
+        // Ensure stickiness has a usable value from settings defaults
+        this.settings.set_string("stickiness", this._settingsCache.stickiness);
     }
 
     _createButton() {
@@ -72,10 +76,10 @@ export default class OnTheTop extends Extension {
         this._firstIconUpdate();
 
         // Add the indicator to the panel
-        this._settingsJSON = this._importJSONFile();
-        console.log(JSON.stringify(this._settingsJSON));
+        this._settingsCache = this._loadSettingsSnapshot();
+        console.log(JSON.stringify(this._settingsCache));
         this._addMenu();
-        Main.panel.addToStatusArea(this.uuid, this._indicator, this._settingsJSON.rank, this._settingsJSON.position);
+        Main.panel.addToStatusArea(this.uuid, this._indicator, this._settingsCache.rank, this._settingsCache.position);
     }
 
     _addMenu() {
@@ -122,7 +126,7 @@ export default class OnTheTop extends Extension {
         this._indicator?.destroy();
         this._indicator = null;
 
-        this._settingsJSON = null;
+        this._settingsCache = null;
         this._settings = null;
 
         this._menu?.destroy();
@@ -132,55 +136,13 @@ export default class OnTheTop extends Extension {
         this._removeShortcut();
     }
 
-    _importJSONFile() {
-        let settingsJSONpath = `${this.path}/settings.json`
-        try {
-            let file = Gio.File.new_for_path(settingsJSONpath);
-            let [success, content] = file.load_contents(null);
-
-            if (success) {
-                let json = JSON.parse(content);
-                return json;
-            } else {
-                return null;
-            }
-        } catch (error) {
-            log('Hiba történt:', error.message);
-            return null;
-        }
-    }
-
-    //not used right now
-    _updateJSONFile(newPosition, newRank, newSticky) {
-        let settingsJSONpath = `${this.path}/settings.json`
-        try {
-            let file = Gio.File.new_for_path(settingsJSONpath);
-            let [success, content] = file.load_contents(null);
-
-            if (success) {
-                let json = JSON.parse(content);
-
-                // Frissítsd a "position" kulcs értékét az új pozícióval
-                json.position = newPosition;
-                json.rank = newRank;
-                json.sticky = newSticky;
-
-                // JSON objektumot szöveggé alakítsuk
-                let updatedContent = JSON.stringify(json, null, 4);
-
-                // A fájl tartalmának frissítése
-                file.replace_contents(
-                    updatedContent,
-                    null,
-                    false,
-                    Gio.FileCreateFlags.REPLACE_DESTINATION,
-                    null
-                );
-            } else {
-            }
-        } catch (error) {
-            log('Hiba történt:', error.message);
-        }
+    _loadSettingsSnapshot() {
+        const position = this.settings?.get_string('positions') || 'right';
+        const rankValue = parseInt(this.settings?.get_string('ranking'), 10);
+        const rank = Number.isNaN(rankValue) ? 0 : rankValue;
+        const stickiness = this.settings?.get_string('stickiness') || 'false';
+        const shortcut = this.settings?.get_strv('toggle-pin-shortcut') || [];
+        return { position, rank, stickiness, shortcut };
     }
 
     _focusAppChanged() {
@@ -284,8 +246,7 @@ export default class OnTheTop extends Extension {
 
     _changePosition() {
         console.log('_changePosition', this.settings.get_string('positions'), this.settings.get_string('ranking'), this.settings.get_string('stickiness'));
-        this._updateJSONFile(this.settings.get_string('positions'), this.settings.get_string('ranking'), this.settings.get_string('stickiness'));
-        //this._updateJSONFile(this.settings.get_string('positions'),2);
+        this._settingsCache = this._loadSettingsSnapshot();
         this._changeIconPosition();
     }
 
